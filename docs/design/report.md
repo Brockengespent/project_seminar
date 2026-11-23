@@ -260,7 +260,7 @@ sequenceDiagram
     participant Ext as Существующая модель
     participant Graph as Graph Engine
     participant DB as SQL DB
-    participant Opt as LLM Optimizer & Validator
+    participant Optimizer as LLM Optimizer & Validator
     participant Cache as Redis Cache
     participant LLM as LLM API (GigaChat/YandexGPT)
     participant Log as Telemetry Logger
@@ -281,28 +281,28 @@ sequenceDiagram
     Graph->>Graph: Детерминированный обход графа (проверка пререквизитов, НФТ-2)
     Graph-->>API: next_nodes + минимальный локальный подграф + сводка прогресса
 
-    API->>Opt: Получить пояснение (next_nodes, subgraph, summary, question)
-    Opt->>Opt: Сформировать cache_key (SHA-256 подграфа и интента)
-    Opt->>Cache: GET cache_key
+    API->>Optimizer: Получить пояснение (next_nodes, subgraph, summary, question)
+    Optimizer->>Optimizer: Сформировать cache_key (SHA-256 подграфа и интента)
+    Optimizer->>Cache: GET cache_key
 
     alt Cache Hit (найдено в кэше — ФТ-7, НФТ-1, НФТ-2)
-        Cache-->>Opt: Валидированное пояснение (0 токенов LLM)
-        Opt-->>API: Пояснение + cache_hit=true
+        Cache-->>Optimizer: Валидированное пояснение (0 токенов LLM)
+        Optimizer-->>API: Пояснение + cache_hit=true
     else Cache Miss (нужен вызов LLM)
-        Opt->>Opt: Сжатие контекста и выбор модели по сложности вопроса (ФТ-7, НФТ-1)
-        Opt->>LLM: Запрос со сжатым подграфом и списком допустимых node_id (ФТ-5)
+        Optimizer->>Optimizer: Сжатие контекста и выбор модели по сложности вопроса (ФТ-7, НФТ-1)
+        Optimizer->>LLM: Запрос со сжатым подграфом и списком допустимых node_id (ФТ-5)
 
         alt LLM API ответил в пределах таймаута
-            LLM-->>Opt: Текст ответа + статистика токенов
-            Opt->>Opt: Валидация ссылок на узлы графа (ФТ-6, НФТ-3)
+            LLM-->>Optimizer: Текст ответа + статистика токенов
+            Optimizer->>Optimizer: Валидация ссылок на узлы графа (ФТ-6, НФТ-3)
             opt Обнаружены несогласованные рекомендации
-                Opt->>Opt: Отфильтровать узлы вне графа и скорректировать ссылки
+                Optimizer->>Optimizer: Отфильтровать узлы вне графа и скорректировать ссылки
             end
-            Opt->>Cache: SET cache_key (TTL)
-            Opt-->>API: Валидированное пояснение + метрики токенов
+            Optimizer->>Cache: SET cache_key (TTL)
+            Optimizer-->>API: Валидированное пояснение + метрики токенов
         else Таймаут или 5xx ошибка LLM API (Graceful Degradation — НФТ-5)
-            LLM--xOpt: Timeout / 5xx Error
-            Opt-->>API: Детерминированный шаг + описание узла из БД (fallback=true)
+            LLM--xOptimizer: Timeout / 5xx Error
+            Optimizer-->>API: Детерминированный шаг + описание узла из БД (fallback=true)
         end
     end
 
